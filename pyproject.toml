@@ -26,6 +26,9 @@ dependencies = [
     "transformers>=5.13.0",
 ]
 
+[project.scripts]
+toolbox-gen-enums = "diffusers_vps_toolbox.registry.generator:main"
+
 [dependency-groups]
 dev = [
     "pytest>=9.1.1",

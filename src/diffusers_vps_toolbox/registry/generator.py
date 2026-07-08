@@ -1,6 +1,7 @@
 import yaml
 import os
 import re
+import argparse
 from pathlib import Path
 
 def extract_civitai_version(urn: str) -> str:
@@ -12,11 +13,7 @@ def extract_civitai_version(urn: str) -> str:
         return match.group(1)
     return ""
 
-def generate_enums():
-    registry_dir = Path(__file__).parent
-    yaml_path = registry_dir / "models.yml"
-    output_path = registry_dir / "generated_enums.py"
-    
+def generate_enums(yaml_path: Path, output_path: Path):
     if not yaml_path.exists():
         print(f"Error: {yaml_path} not found.")
         return
@@ -52,5 +49,17 @@ def generate_enums():
         
     print(f"Successfully generated {output_path}")
 
+def main():
+    parser = argparse.ArgumentParser(description="Generate Enums from models.yml")
+    parser.add_argument("--input", type=str, default="models.yml", help="Path to models.yml")
+    parser.add_argument("--output", type=str, default="generated_enums.py", help="Output python file path")
+    
+    args = parser.parse_args()
+    
+    input_path = Path(args.input)
+    output_path = Path(args.output)
+    
+    generate_enums(input_path, output_path)
+
 if __name__ == "__main__":
-    generate_enums()
+    main()
