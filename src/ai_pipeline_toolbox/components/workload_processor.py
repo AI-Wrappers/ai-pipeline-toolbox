@@ -1,7 +1,7 @@
 import json
 from typing import Any, Iterable, Type
 from pydantic import BaseModel
-from diffusers_vps_toolbox.core.interfaces import BaseWorkloadProcessor
+from ai_pipeline_toolbox.core.interfaces import BaseWorkloadProcessor
 
 class PydanticWorkloadProcessor(BaseWorkloadProcessor):
     """

@@ -3,8 +3,8 @@ import logging
 from typing import Dict, Any, List
 from pydantic import BaseModel, Field
 from enum import Enum
-from diffusers_vps_toolbox.core.pipeline import BaseGenerationPipeline
-from diffusers_vps_toolbox.registry.generated_enums import Checkpoints, Vae
+from ai_pipeline_toolbox.core.pipeline import BaseGenerationPipeline
+from ai_pipeline_toolbox.registry.generated_enums import Checkpoints, Vae
 
 logger = logging.getLogger(__name__)
 

@@ -1,6 +1,6 @@
 import pytest
 from pydantic import BaseModel, ValidationError
-from diffusers_vps_toolbox.components.workload_processor import PydanticWorkloadProcessor
+from ai_pipeline_toolbox.components.workload_processor import PydanticWorkloadProcessor
 
 class DummyTask(BaseModel):
     task_id: str

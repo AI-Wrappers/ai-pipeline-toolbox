@@ -4,7 +4,7 @@ from typing import List, Dict
 from enum import Enum
 from pathlib import Path
 from huggingface_hub import hf_hub_download, snapshot_download
-from diffusers_vps_toolbox.core.interfaces import BaseDownloader
+from ai_pipeline_toolbox.core.interfaces import BaseDownloader
 
 class ModelDownloader(BaseDownloader):
     """

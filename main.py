@@ -2,13 +2,13 @@ import logging
 import os
 from typing import List, Dict
 from enum import Enum
-from diffusers_vps_toolbox.orchestrator.runner import Runner
-from diffusers_vps_toolbox.components.workload_processor import PydanticWorkloadProcessor
-from diffusers_vps_toolbox.components.state_manager import SQLiteStateManager
-from diffusers_vps_toolbox.components.model_downloader import ModelDownloader
-from diffusers_vps_toolbox.components.loop_manager import LoopManager
-from diffusers_vps_toolbox.components.result_saver import LocalResultSaver
-from diffusers_vps_toolbox.pipelines.example_flux_pipeline import ExampleFluxPipeline, FluxWorkload, FluxConfig
+from ai_pipeline_toolbox.orchestrator.runner import Runner
+from ai_pipeline_toolbox.components.workload_processor import PydanticWorkloadProcessor
+from ai_pipeline_toolbox.components.state_manager import SQLiteStateManager
+from ai_pipeline_toolbox.components.model_downloader import ModelDownloader
+from ai_pipeline_toolbox.components.loop_manager import LoopManager
+from ai_pipeline_toolbox.components.result_saver import LocalResultSaver
+from ai_pipeline_toolbox.pipelines.example_flux_pipeline import ExampleFluxPipeline, FluxWorkload, FluxConfig
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 

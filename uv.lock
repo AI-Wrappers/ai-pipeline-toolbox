@@ -3,6 +3,41 @@ revision = 3
 requires-python = ">=3.13"
 
 [[package]]
+name = "ai-pipeline-toolbox"
+version = "0.1.0"
+source = { editable = "." }
+dependencies = [
+    { name = "diffusers" },
+    { name = "kornia" },
+    { name = "pillow" },
+    { name = "pydantic" },
+    { name = "pyyaml" },
+    { name = "torch" },
+    { name = "torchvision" },
+    { name = "transformers" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "pytest" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "diffusers", specifier = ">=0.39.0" },
+    { name = "kornia", specifier = ">=0.8.3" },
+    { name = "pillow", specifier = ">=12.3.0" },
+    { name = "pydantic", specifier = ">=2.5.0" },
+    { name = "pyyaml", specifier = ">=6.0" },
+    { name = "torch", specifier = ">=2.13.0" },
+    { name = "torchvision", specifier = ">=0.28.0" },
+    { name = "transformers", specifier = ">=5.13.0" },
+]
+
+[package.metadata.requires-dev]
+dev = [{ name = "pytest", specifier = ">=9.1.1" }]
+
+[[package]]
 name = "annotated-doc"
 version = "0.0.4"
 source = { registry = "https://pypi.org/simple" }
@@ -202,41 +237,6 @@ sdist = { url = "https://files.pythonhosted.org/packages/1a/81/6095237b86a3116c4
 wheels = [
     { url = "https://files.pythonhosted.org/packages/3f/3f/7469c46e9d22307ea686bab687d70e6bf328722952f9d10339f5e913e608/diffusers-0.39.0-py3-none-any.whl", hash = "sha256:912aca51b5787365110806e984d5555735bf8a461073bb8459029d0bca7870ef", size = 5631176, upload-time = "2026-07-03T08:48:45.337Z" },
 ]
-
-[[package]]
-name = "diffusers-vps-toolbox"
-version = "0.1.0"
-source = { editable = "." }
-dependencies = [
-    { name = "diffusers" },
-    { name = "kornia" },
-    { name = "pillow" },
-    { name = "pydantic" },
-    { name = "pyyaml" },
-    { name = "torch" },
-    { name = "torchvision" },
-    { name = "transformers" },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "pytest" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "diffusers", specifier = ">=0.39.0" },
-    { name = "kornia", specifier = ">=0.8.3" },
-    { name = "pillow", specifier = ">=12.3.0" },
-    { name = "pydantic", specifier = ">=2.5.0" },
-    { name = "pyyaml", specifier = ">=6.0" },
-    { name = "torch", specifier = ">=2.13.0" },
-    { name = "torchvision", specifier = ">=0.28.0" },
-    { name = "transformers", specifier = ">=5.13.0" },
-]
-
-[package.metadata.requires-dev]
-dev = [{ name = "pytest", specifier = ">=9.1.1" }]
 
 [[package]]
 name = "filelock"

@@ -1,10 +1,10 @@
 import logging
 from typing import Any, Dict, Optional
-from diffusers_vps_toolbox.core.interfaces import (
+from ai_pipeline_toolbox.core.interfaces import (
     BaseLoopManager, BaseStateManager, BaseDownloader, 
     BaseResultSaver, BaseWorkloadProcessor
 )
-from diffusers_vps_toolbox.core.pipeline import BaseGenerationPipeline
+from ai_pipeline_toolbox.core.pipeline import BaseGenerationPipeline
 
 logger = logging.getLogger(__name__)
 

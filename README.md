@@ -1,6 +1,6 @@
-# Diffusers VPS Toolbox
+# AI Pipeline Toolbox
 
-**Diffusers VPS Toolbox** — це гнучкий, слабо зв'язаний Python-фреймворк (обгортка) для зручного запуску кастомних генеративних пайплайнів (на базі Diffusers, Transformers тощо). 
+**AI Pipeline Toolbox** — це гнучкий, слабо зв'язаний Python-фреймворк (обгортка) для зручного запуску кастомних генеративних пайплайнів (на базі Diffusers, Transformers тощо). 
 
 Головна мета проєкту — **відділити логіку самої генерації** від інфраструктурних задач: завантаження моделей, оркестрації, управління чергами, збереження станів та вводу-виводу результатів. Це дозволяє легко створювати CLI, Jupyter або GUI інтерфейси без дублювання базового коду.
 
@@ -20,7 +20,7 @@
 
 ```text
 /
-├── src/diffusers_vps_toolbox/
+├── src/ai_pipeline_toolbox/
 │   ├── core/                   # Базові інтерфейси (ABC) та контракт BaseGenerationPipeline
 │   ├── components/             # Реалізація LoopManager, StateManager, Downloader, WorkloadProcessor
 │   ├── orchestrator/           # Клас Runner (головний оркестратор потоку)
@@ -37,10 +37,10 @@
 
 ```bash
 # Якщо використовуєте uv:
-uv add git+https://github.com/khar-ma2/diffusers-vps-toolbox.git@main
+uv add git+https://github.com/khar-ma2/ai-pipeline-toolbox.git@main
 
 # Якщо використовуєте pip:
-pip install git+https://github.com/khar-ma2/diffusers-vps-toolbox.git@main
+pip install git+https://github.com/khar-ma2/ai-pipeline-toolbox.git@main
 ```
 
 *(Якщо ж ви хочете локально розробляти саму бібліотеку, ви можете клонувати репозиторій та виконати `uv sync` або `pip install -e .`)*
@@ -70,13 +70,13 @@ pip install git+https://github.com/khar-ma2/diffusers-vps-toolbox.git@main
 Скрипт `main.py` в корені проєкту наочно показує, як ініціалізувати всі компоненти, передати їх в `Runner` та запустити генерацію.
 
 ```python
-from diffusers_vps_toolbox.orchestrator.runner import Runner
-from diffusers_vps_toolbox.components.workload_processor import PydanticWorkloadProcessor
-from diffusers_vps_toolbox.components.state_manager import SQLiteStateManager
-from diffusers_vps_toolbox.components.model_downloader import ModelDownloader
-from diffusers_vps_toolbox.components.loop_manager import LoopManager
-from diffusers_vps_toolbox.components.result_saver import LocalResultSaver
-from diffusers_vps_toolbox.pipelines.example_flux_pipeline import ExampleFluxPipeline, FluxWorkload
+from ai_pipeline_toolbox.orchestrator.runner import Runner
+from ai_pipeline_toolbox.components.workload_processor import PydanticWorkloadProcessor
+from ai_pipeline_toolbox.components.state_manager import SQLiteStateManager
+from ai_pipeline_toolbox.components.model_downloader import ModelDownloader
+from ai_pipeline_toolbox.components.loop_manager import LoopManager
+from ai_pipeline_toolbox.components.result_saver import LocalResultSaver
+from ai_pipeline_toolbox.pipelines.example_flux_pipeline import ExampleFluxPipeline, FluxWorkload
 
 def main():
     # 1. Ініціалізуємо інфраструктурні компоненти

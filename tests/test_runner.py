@@ -1,6 +1,6 @@
 import pytest
 from unittest.mock import MagicMock
-from diffusers_vps_toolbox.orchestrator.runner import Runner
+from ai_pipeline_toolbox.orchestrator.runner import Runner
 
 def test_runner_flow():
     """

@@ -1,5 +1,5 @@
 import pytest
-from diffusers_vps_toolbox.components.state_manager import SQLiteStateManager
+from ai_pipeline_toolbox.components.state_manager import SQLiteStateManager
 
 @pytest.fixture
 def state_manager(tmp_path):

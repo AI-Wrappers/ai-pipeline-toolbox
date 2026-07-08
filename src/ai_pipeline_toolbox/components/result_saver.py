@@ -2,7 +2,7 @@ import os
 import json
 from pathlib import Path
 from typing import Any, Dict
-from diffusers_vps_toolbox.core.interfaces import BaseResultSaver
+from ai_pipeline_toolbox.core.interfaces import BaseResultSaver
 
 class LocalResultSaver(BaseResultSaver):
     """

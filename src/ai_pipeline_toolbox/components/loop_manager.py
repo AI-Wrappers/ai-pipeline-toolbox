@@ -1,5 +1,5 @@
 from typing import Any, Iterable
-from diffusers_vps_toolbox.core.interfaces import BaseLoopManager
+from ai_pipeline_toolbox.core.interfaces import BaseLoopManager
 
 class LoopManager(BaseLoopManager):
     """

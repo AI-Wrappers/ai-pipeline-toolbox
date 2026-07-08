@@ -1,5 +1,5 @@
 import sqlite3
-from diffusers_vps_toolbox.core.interfaces import BaseStateManager
+from ai_pipeline_toolbox.core.interfaces import BaseStateManager
 
 class SQLiteStateManager(BaseStateManager):
     """

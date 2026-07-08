@@ -1,5 +1,5 @@
 import pytest
-from diffusers_vps_toolbox.components.loop_manager import LoopManager
+from ai_pipeline_toolbox.components.loop_manager import LoopManager
 
 def test_loop_manager_fifo():
     """
