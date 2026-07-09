@@ -8,7 +8,7 @@
 
 - **Абстрактні інтерфейси (ABCs)**: Пайплайни та інфраструктурні компоненти ізольовані один від одного через Dependency Injection.
 - **Динамічний реєстр моделей**: Файл `models.yml` слугує джерелом правди. З нього автоматично генеруються Python Enums для безпечного та типізованого використання моделей у коді.
-- **Model Downloader**: Автоматично перевіряє та завантажує потрібні пайплайну моделі з HuggingFace, CivitAI (через API) або за прямими URL перед початком генерації.
+- **Model Fetcher**: Автоматично перевіряє та завантажує моделі через фоновий демон `aria2c` (за допомогою `aria2p`). Підтримує завантаження як статичних моделей з реєстру, так і динамічних (наприклад, LoRA) з робочого навантаження, автоматично додаючи потрібні токени авторизації для провайдерів `huggingface` та `civitai`.
 - **Сувора типізація (Pydantic)**: Всі вхідні дані (JSON workload) та параметри конфігурації проходять сувору валідацію через Pydantic.
 - **State Manager (SQLite)**: Зберігає статус виконання завдань (`pending`, `completed`, `failed`). У разі падіння процесу, при наступному запуску виконані задачі будуть автоматично пропущені.
 - **Loop Manager**: Обробляє чергу навантаження (працює за принципом FIFO).
@@ -57,7 +57,7 @@ pip install git+https://github.com/khar-ma2/ai-pipeline-toolbox.git@main
    Checkpoints:
      my_new_model:
        provider: huggingface
-       repo_id: username/model-id
+       download_url: https://huggingface.co/username/model
    ```
 3. Запустіть скрипт кодогенерації за допомогою вбудованої CLI утиліти:
    ```bash
@@ -65,17 +65,65 @@ pip install git+https://github.com/khar-ma2/ai-pipeline-toolbox.git@main
    ```
 4. У вашому пайплайні тепер можна імпортувати згенерований `my_enums.py` і використовувати `Checkpoints.MY_NEW_MODEL`.
 
-## 📖 Приклад використання
+## 📖 Як писати кастомні пайплайни
 
-Скрипт `main.py` в корені проєкту наочно показує, як ініціалізувати всі компоненти, передати їх в `Runner` та запустити генерацію.
+Щоб створити власний пайплайн (наприклад, для Stable Diffusion або аудіо генерації), ви повинні наслідувати `BaseGenerationPipeline` і вказати типи конфігурації, завдання та результату за допомогою дженериків:
+
+```python
+from ai_pipeline_toolbox.core.pipeline import BaseGenerationPipeline
+from pydantic import BaseModel
+from PIL import Image
+
+class MyConfig(BaseModel):
+    steps: int = 20
+
+class MyWorkload(BaseModel):
+    prompt: str
+
+# Вказуємо, що пайплайн приймає MyConfig, MyWorkload і повертає Image.Image
+class MyImagePipeline(BaseGenerationPipeline[MyConfig, MyWorkload, Image.Image]):
+    required_models = [Checkpoints.MY_MODEL]
+    
+    def setup(self, models_paths):
+        # Ініціалізуємо ваги моделей
+        self.pipe = SomePipeline.from_pretrained(models_paths[Checkpoints.MY_MODEL])
+        
+    def __call__(self, config: MyConfig, workload: MyWorkload) -> Image.Image:
+        # Pydantic вже провалідував config і workload
+        image = self.pipe(workload.prompt, num_inference_steps=config.steps).images[0]
+        return image # Повертаємо об'єкт картинки
+```
+
+## 💾 Як писати Result Savers
+
+Фреймворк використовує Dependency Injection та дженерики для суворого контролю форматів збереження. Щоб ваш пайплайн зберігав результати правильно, створіть або використайте існуючий `ResultSaver`, який приймає той самий тип даних, що повертає пайплайн.
+
+Приклад створення сейвера для тексту:
+
+```python
+from ai_pipeline_toolbox.core.interfaces import BaseResultSaver
+from typing import Dict, Any
+
+class TextResultSaver(BaseResultSaver[str]): # Працює тільки зі str
+    def __init__(self, output_dir: str):
+        self.output_dir = Path(output_dir)
+
+    def save(self, result: str, metadata: Dict[str, Any]) -> str:
+        # Логіка збереження текстового файлу
+        ...
+```
+
+## 🚀 Як використовувати фреймворк (Запуск задач)
+
+Скрипт `main.py` в корені проєкту наочно показує, як ініціалізувати всі компоненти, об'єднати їх в `Runner` та запустити виконання.
 
 ```python
 from ai_pipeline_toolbox.orchestrator.runner import Runner
 from ai_pipeline_toolbox.components.workload_processor import PydanticWorkloadProcessor
 from ai_pipeline_toolbox.components.state_manager import SQLiteStateManager
-from ai_pipeline_toolbox.components.model_downloader import ModelDownloader
+from ai_pipeline_toolbox.components.model_fetcher import ModelFetcher
 from ai_pipeline_toolbox.components.loop_manager import LoopManager
-from ai_pipeline_toolbox.components.result_saver import LocalResultSaver
+from ai_pipeline_toolbox.components.result_saver import TextResultSaver
 from ai_pipeline_toolbox.pipelines.example_flux_pipeline import ExampleFluxPipeline, FluxWorkload
 
 def main():
@@ -83,13 +131,17 @@ def main():
     runner = Runner(
         workload_processor=PydanticWorkloadProcessor(FluxWorkload),
         state_manager=SQLiteStateManager("data/state.db"),
-        downloader=ModelDownloader("data/models_cache"),
+        fetcher=ModelFetcher("data/models_cache"),
         loop_manager=LoopManager(),
-        result_saver=LocalResultSaver("data/outputs")
+        result_saver=TextResultSaver("data/outputs") # Тип сейвера має збігатися з ReturnType пайплайну
     )
     
-    # 2. Виконуємо пайплайн для масиву задач (JSON-like)
-    runner.run(pipeline=ExampleFluxPipeline(), raw_workload=[...], config=...)
+    # 2. Виконуємо пайплайн для масиву задач
+    runner.run(
+        pipeline=ExampleFluxPipeline(), 
+        raw_workload=[{"task_id": "1", "prompt": "cat"}], 
+        config=...
+    )
 ```
 
 ## 🧪 Запуск тестів

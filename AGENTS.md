@@ -22,7 +22,7 @@ The framework must be agnostic to the presentation layer, allowing it to be cons
 ├── components/             # Implementations of core wrapper logic
 │   ├── loop_manager.py     
 │   ├── state_manager.py    
-│   ├── model_downloader.py 
+│   ├── model_fetcher.py 
 │   ├── result_saver.py     
 │   ├── logger.py           
 │   └── workload_processor.py
@@ -53,9 +53,9 @@ The framework must be agnostic to the presentation layer, allowing it to be cons
 
 ## 3. Core Wrapper Components
 
-* **ModelDownloader:** - Parses the pipeline's `required_models`.
-* Maps Enums to real Hub paths via the registry config.
-* Downloads missing weights (e.g., via `huggingface_hub`) before pipeline initialization. Returns local paths.
+* **ModelFetcher:** - Parses the pipeline's `required_models` and any dynamically requested models from workloads (e.g., LoRAs).
+* Downloads missing weights using an auto-managed `aria2c` background daemon via `aria2p` API.
+* Provides authorization headers automatically based on the model's `provider` field (`huggingface`, `civitai`).
 
 
 * **WorkloadProcessor:**
@@ -91,7 +91,7 @@ The framework must be agnostic to the presentation layer, allowing it to be cons
 1. Accepts a `BaseGenerationPipeline`, a Workload source, and Configurations.
 2. Passes Workload to `WorkloadProcessor`.
 3. Queries `StateManager` to filter out already completed tasks.
-4. Calls `ModelDownloader` to ensure dependencies are met.
+4. Calls `ModelFetcher` (aggregating static and dynamic models) to ensure dependencies are met.
 5. Instantiates the Pipeline with downloaded model paths.
 6. Hands the remaining tasks to `LoopManager`.
 7. Executes the Pipeline, catches errors, logs them.

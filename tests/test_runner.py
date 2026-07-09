@@ -20,24 +20,25 @@ def test_runner_flow():
     # Імітуємо, що Задача 1 вже виконана, а задача 2 ще ні
     state_manager.is_completed.side_effect = lambda t_id: t_id == "1"
     
-    downloader = MagicMock()
-    downloader.download.return_value = {"model": "/path"}
-    
     loop_manager = MagicMock()
     # LoopManager просто повертає задачі, які йому передали
     loop_manager.iterate.side_effect = lambda tasks: iter(tasks)
+    
+    fetcher = MagicMock()
+    fetcher.fetch.return_value = {"model": "/path"}
     
     result_saver = MagicMock()
     result_saver.save.return_value = "/saved/path"
     
     pipeline = MagicMock()
     pipeline.required_models = ["model"]
+    pipeline.get_dynamic_models.return_value = []
     pipeline.return_value = "Result"
     
     runner = Runner(
         workload_processor=processor,
         state_manager=state_manager,
-        downloader=downloader,
+        fetcher=fetcher,
         loop_manager=loop_manager,
         result_saver=result_saver
     )
