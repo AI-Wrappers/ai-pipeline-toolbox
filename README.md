@@ -65,6 +65,25 @@ pip install git+https://github.com/khar-ma2/ai-pipeline-toolbox.git@main
    ```
 4. У вашому пайплайні тепер можна імпортувати згенерований `my_enums.py` і використовувати `Checkpoints.MY_NEW_MODEL`.
 
+### Динамічні моделі (LoRA, тощо)
+Якщо вам потрібно завантажити модель, якої немає в `models.yml` (наприклад, користувач передав лінк на кастомну LoRA), використовуйте клас `DynamicModel`. Він суворо типізований через Pydantic. 
+Також фреймворк має вбудований хелпер `resolve_air_urn`, що дозволяє автоматично конвертувати AIR/URN формати (наприклад `urn:air:civitai:lora:12345@67890`) у прямі посилання на завантаження.
+
+```python
+from ai_pipeline_toolbox.core.models import DynamicModel
+from ai_pipeline_toolbox.core.helpers import resolve_air_urn
+from my_enums import Provider, Category, DiT
+
+# Створюємо типізований запит на завантаження
+lora_model = DynamicModel(
+    url=resolve_air_urn("urn:air:civitai:lora:12345@67890"),
+    provider=Provider.CIVITAI,
+    category=Category.DIT, # або просто клас DiT
+    filename="my_custom_lora.safetensors"
+)
+```
+ModelFetcher автоматично валідуватиме передані категорії, уникаючи створення неправильних директорій.
+
 ## 📖 Як писати кастомні пайплайни
 
 Щоб створити власний пайплайн (наприклад, для Stable Diffusion або аудіо генерації), ви повинні наслідувати `BaseGenerationPipeline` і вказати типи конфігурації, завдання та результату за допомогою дженериків:

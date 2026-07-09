@@ -2,11 +2,9 @@ import pytest
 from enum import Enum
 from unittest.mock import patch, MagicMock
 from ai_pipeline_toolbox.components.model_fetcher import ModelFetcher
+from ai_pipeline_toolbox.core.models import DynamicModel
 
-class MockRegistry(Enum):
-    HF_MODEL = {'provider': 'huggingface', 'download_url': 'test/repo'}
-    CIVITAI_MODEL = {'provider': 'civitai', 'download_url': 'https://civitai.com/api/download/models/12345'}
-    URL_MODEL = {'provider': 'direct_url', 'download_url': 'http://example.com/model.bin'}
+from ai_pipeline_toolbox.registry.generated_enums import Checkpoints, Vae, TextEncoders
 
 @pytest.fixture
 def mock_aria2():
@@ -30,17 +28,16 @@ def test_fetcher_enum_models(fetcher, mock_aria2):
     mock_api_instance.add_uris.return_value = [mock_dl]
     mock_api_instance.get_downloads.return_value = [mock_dl]
     
-    fetcher.fetch([MockRegistry.HF_MODEL, MockRegistry.CIVITAI_MODEL, MockRegistry.URL_MODEL])
+    fetcher.fetch([Checkpoints.STABLE_DIFFUSION_V2_1, Vae.FLUX1D, TextEncoders.CLIP_L])
         
     assert mock_api_instance.add_uris.call_count == 3
     
     # Check HF Headers
     calls = mock_api_instance.add_uris.call_args_list
     assert any("Authorization: Bearer mock_hf" in kwargs['options'].get('header', []) for args, kwargs in calls)
-    assert any("Authorization: Bearer mock_civitai" in kwargs['options'].get('header', []) for args, kwargs in calls)
 
-def test_fetcher_dynamic_string(fetcher, mock_aria2):
-    """Test fetching dynamic models via string URLs."""
+def test_fetcher_dynamic_model(fetcher, mock_aria2):
+    """Test fetching dynamic models via DynamicModel."""
     mock_api_instance = mock_aria2.return_value
     mock_dl = MagicMock()
     mock_dl.gid = "123"
@@ -48,8 +45,9 @@ def test_fetcher_dynamic_string(fetcher, mock_aria2):
     mock_api_instance.add_uris.return_value = [mock_dl]
     mock_api_instance.get_downloads.return_value = [mock_dl]
     
-    fetcher.fetch(["https://huggingface.co/username/model"])
+    dyn_model = DynamicModel(url="https://civitai.com/api/download/models/12345", provider="civitai", category="Dynamic")
+    fetcher.fetch([dyn_model])
         
     mock_api_instance.add_uris.assert_called_once()
     kwargs = mock_api_instance.add_uris.call_args[1]
-    assert "Authorization: Bearer mock_hf" in kwargs['options'].get('header', [])
+    assert "Authorization: Bearer mock_civitai" in kwargs['options'].get('header', [])

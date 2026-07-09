@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Generic, TypeVar, Dict, List, Union
 from enum import Enum
+from ai_pipeline_toolbox.core.models import DynamicModel
 
 ConfigType = TypeVar('ConfigType')
 WorkloadType = TypeVar('WorkloadType')
@@ -24,7 +25,7 @@ class BaseGenerationPipeline(ABC, Generic[ConfigType, WorkloadType, ReturnType])
         """
         pass
         
-    def get_dynamic_models(self, workload: WorkloadType) -> List[str]:
+    def get_dynamic_models(self, workload: WorkloadType) -> List[DynamicModel]:
         """
         Extracts dynamically required models (e.g., LoRAs) from a workload.
         
@@ -32,7 +33,7 @@ class BaseGenerationPipeline(ABC, Generic[ConfigType, WorkloadType, ReturnType])
             workload: A single validated task/workload item.
             
         Returns:
-            A list of string URLs pointing to dynamic models.
+            A list of DynamicModel instances.
         """
         return []
         

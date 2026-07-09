@@ -19,6 +19,33 @@ def generate_enums(yaml_path: Path, output_path: Path):
     ]
     
     if data:
+        # Collect unique providers
+        providers = {"huggingface", "civitai", "direct_url"}
+        for enum_name, enum_values in data.items():
+            if enum_values:
+                for key, val in enum_values.items():
+                    provider = val.get("provider")
+                    if provider:
+                        providers.add(provider)
+        
+        # Generate Provider Enum
+        lines.append("class Provider(str, Enum):")
+        for p in sorted(providers):
+            safe_p = p.upper().replace("-", "_").replace(".", "_")
+            lines.append(f'    {safe_p} = "{p}"')
+        lines.append("")
+        
+        # Generate Category Enum
+        categories = set(data.keys())
+        categories.add("Dynamic")
+        
+        lines.append("class Category(str, Enum):")
+        for c in sorted(categories):
+            safe_c = c.upper().replace("-", "_").replace(".", "_")
+            lines.append(f'    {safe_c} = "{c}"')
+        lines.append("")
+        
+        # Generate model Enums
         for enum_name, enum_values in data.items():
             lines.append(f"class {enum_name}(Enum):")
             if not enum_values:

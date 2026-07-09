@@ -9,6 +9,8 @@ from enum import Enum
 
 import aria2p
 from ai_pipeline_toolbox.core.interfaces import BaseFetcher
+from ai_pipeline_toolbox.core.models import DynamicModel
+from ai_pipeline_toolbox.registry.generated_enums import Category
 
 logger = logging.getLogger(__name__)
 
@@ -81,7 +83,7 @@ class ModelFetcher(BaseFetcher):
                     
         raise RuntimeError("Failed to start aria2c daemon after multiple attempts.")
 
-    def fetch(self, models: List[Union[Enum, str]]) -> Dict[Union[Enum, str], str]:
+    def fetch(self, models: List[Union[Enum, DynamicModel]]) -> Dict[Union[Enum, DynamicModel], str]:
         local_paths = {}
         download_tasks = []
         
@@ -91,21 +93,25 @@ class ModelFetcher(BaseFetcher):
                 provider = config.get("provider")
                 download_url = config.get("download_url")
                 
-                category = type(model).__name__
+                category_name = type(model).__name__
                 ext = Path(download_url).suffix
                 filename = f"{model.name}{ext}"
-                sub_dir = category
-            elif isinstance(model, str):
-                provider = "direct_url"
-                download_url = model
-                filename = download_url.split('/')[-1] or "downloaded_model.bin"
-                # Autodetect provider from domain
-                if "huggingface.co" in download_url:
-                    provider = "huggingface"
-                elif "civitai.com" in download_url:
-                    provider = "civitai"
+                sub_dir = Category(category_name).value
+            elif isinstance(model, DynamicModel):
+                provider = model.provider
+                download_url = model.url
+                filename = model.filename or download_url.split('/')[-1] or "downloaded_model.bin"
+                # Autodetect provider from domain if not explicitly set and direct_url is default
+                if provider == "direct_url":
+                    if "huggingface.co" in download_url:
+                        provider = "huggingface"
+                    elif "civitai.com" in download_url:
+                        provider = "civitai"
                 
-                sub_dir = "Dynamic"
+                # If model.category is Enum class it will be parsed to str, then we validate via Category
+                # model.category is a str or Category here because of validation in DynamicModel
+                cat_val = model.category.value if isinstance(model.category, Enum) else model.category
+                sub_dir = Category(cat_val).value
             else:
                 raise ValueError(f"Unsupported model type: {type(model)}")
                 

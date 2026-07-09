@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Any, Dict, Iterable, List, Union, Generic, TypeVar
 from enum import Enum
+from ai_pipeline_toolbox.core.models import DynamicModel
 
 ReturnType = TypeVar('ReturnType')
 
@@ -34,8 +35,8 @@ class BaseFetcher(ABC):
     """Fetches missing weights and returns local paths."""
     
     @abstractmethod
-    def fetch(self, models: List[Union[Enum, str]]) -> Dict[Union[Enum, str], str]:
-        """Maps Enums or URL strings to local paths, downloads weights, returns local paths."""
+    def fetch(self, models: List[Union[Enum, DynamicModel]]) -> Dict[Union[Enum, DynamicModel], str]:
+        """Maps Enums or DynamicModels to local paths, downloads weights, returns local paths."""
         pass
 
 class BaseResultSaver(ABC, Generic[ReturnType]):
