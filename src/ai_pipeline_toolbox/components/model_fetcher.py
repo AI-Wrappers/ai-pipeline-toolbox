@@ -87,6 +87,11 @@ class ModelFetcher(BaseFetcher):
         local_paths = {}
         download_tasks = []
         
+        # Group models by their destination local_path
+        # and resolve target directories/filenames first
+        models_by_path = {}
+        model_details = {}  # local_path -> (provider, download_url, filename, target_dir)
+        
         for model in models:
             if isinstance(model, Enum):
                 config = model.value
@@ -116,13 +121,22 @@ class ModelFetcher(BaseFetcher):
                 raise ValueError(f"Unsupported model type: {type(model)}")
                 
             target_dir = self.cache_dir / sub_dir
-            target_dir.mkdir(parents=True, exist_ok=True)
             local_path = target_dir / filename
             
+            models_by_path.setdefault(local_path, []).append(model)
+            if local_path not in model_details:
+                model_details[local_path] = (provider, download_url, filename, target_dir)
+
+        # Now handle downloads for each unique local_path
+        for local_path, models_list in models_by_path.items():
             if local_path.exists():
-                local_paths[model] = str(local_path)
+                for model in models_list:
+                    local_paths[model] = str(local_path)
                 continue
                 
+            provider, download_url, filename, target_dir = model_details[local_path]
+            target_dir.mkdir(parents=True, exist_ok=True)
+            
             headers = []
             if provider == "huggingface":
                 if self.hf_token:
@@ -144,7 +158,7 @@ class ModelFetcher(BaseFetcher):
             logger.info(f"Adding download for {filename} from {download_url} with provider {provider}")
             try:
                 download = self.aria2.add_uris([download_url], options=options)
-                download_tasks.append((model, local_path, download))
+                download_tasks.append((local_path, models_list, download))
             except Exception as e:
                 logger.error(f"Failed to add download for {download_url}: {e}")
                 raise
@@ -156,24 +170,26 @@ class ModelFetcher(BaseFetcher):
             download_dict = {d.gid: d for d in downloads}
             
             pending_tasks = []
-            for model, local_path, dl in download_tasks:
+            for local_path, models_list, dl in download_tasks:
                 current_dl = download_dict.get(dl.gid)
                 if not current_dl:
                     # Depending on aria2 behavior, if it's completed it might still be in the list 
                     # or it might have been purged. Safe assumption: if we can't find it, we need to check the file.
                     if local_path.exists():
-                        local_paths[model] = str(local_path)
+                        for model in models_list:
+                            local_paths[model] = str(local_path)
                     else:
                         raise RuntimeError(f"Download task {dl.gid} disappeared and file not found.")
                     continue
                     
                 if current_dl.is_complete:
-                    local_paths[model] = str(local_path)
+                    for model in models_list:
+                        local_paths[model] = str(local_path)
                 elif current_dl.has_failed:
                     logger.error(f"Download failed for {local_path}: {current_dl.error_message}")
                     raise RuntimeError(f"Failed to download {local_path}: {current_dl.error_message}")
                 else:
-                    pending_tasks.append((model, local_path, current_dl))
+                    pending_tasks.append((local_path, models_list, current_dl))
             
             download_tasks = pending_tasks
             if download_tasks:

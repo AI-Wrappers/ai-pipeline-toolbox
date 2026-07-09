@@ -49,5 +49,28 @@ def test_fetcher_dynamic_model(fetcher, mock_aria2):
     fetcher.fetch([dyn_model])
         
     mock_api_instance.add_uris.assert_called_once()
-    kwargs = mock_api_instance.add_uris.call_args[1]
-    assert "Authorization: Bearer mock_civitai" in kwargs['options'].get('header', [])
+    call_args = mock_api_instance.add_uris.call_args[0]
+    requested_url = call_args[0][0]
+    assert "token=mock_civitai" in requested_url
+
+def test_fetcher_deduplicates_duplicate_models(fetcher, mock_aria2):
+    """Test that duplicate models resolving to the same local path are only downloaded once."""
+    mock_api_instance = mock_aria2.return_value
+    mock_dl = MagicMock()
+    mock_dl.gid = "999"
+    mock_dl.is_complete = True
+    mock_api_instance.add_uris.return_value = mock_dl
+    mock_api_instance.get_downloads.return_value = [mock_dl]
+    
+    # Two unequal DynamicModels (different URLs) that resolve to the same filename and category
+    dyn_model1 = DynamicModel(url="https://civitai.com/api/download/models/797871", provider="civitai", category="Dynamic", filename="watercolor.safetensors")
+    dyn_model2 = DynamicModel(url="https://civitai.com/api/download/models/797871?another_param=1", provider="civitai", category="Dynamic", filename="watercolor.safetensors")
+    
+    res = fetcher.fetch([dyn_model1, dyn_model2])
+    
+    # add_uris should only have been called once because they resolved to the same local_path
+    mock_api_instance.add_uris.assert_called_once()
+    assert len(res) == 2
+    assert res[dyn_model1] == res[dyn_model2]
+
+
