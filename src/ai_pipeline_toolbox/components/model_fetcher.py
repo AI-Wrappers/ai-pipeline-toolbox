@@ -157,15 +157,16 @@ class ModelFetcher(BaseFetcher):
             target_dir.mkdir(parents=True, exist_ok=True)
 
             headers = []
-            options = {"dir": str(target_dir), "out": filename}
+            options = {
+                "dir": str(target_dir),
+                "out": filename,
+                "max-connection-per-server": "1",
+                "split": "1",
+            }
             if provider == "huggingface":
-                options["max-connection-per-server"] = "8"
-                options["split"] = "8"
                 if self.hf_token:
                     headers.append(f"Authorization: Bearer {self.hf_token}")
             elif provider == "civitai":
-                options["max-connection-per-server"] = "1"
-                options["split"] = "1"
                 if self.civitai_token:
                     if "?" in download_url:
                         download_url = f"{download_url}&token={self.civitai_token}"
@@ -210,11 +211,32 @@ class ModelFetcher(BaseFetcher):
                     for model in models_list:
                         local_paths[model] = str(local_path)
                 elif current_dl.has_failed:
-                    logger.error(
-                        f"Download failed for {local_path}: {current_dl.error_message}"
-                    )
+                    err_msg = current_dl.error_message or ""
+                    # Check for HTTP 403 Forbidden
+                    if current_dl.error_code == 22 and "403" in err_msg:
+                        download_url_info = "unknown URL"
+                        if current_dl.files and current_dl.files[0].uris:
+                            first_uri = current_dl.files[0].uris[0]
+                            if isinstance(first_uri, dict):
+                                download_url_info = first_uri.get("uri", "unknown")
+                            else:
+                                download_url_info = getattr(first_uri, "uri", "unknown")
+
+                        hf_status = "set" if self.hf_token else "not set"
+                        civitai_status = "set" if self.civitai_token else "not set"
+                        logger.error(
+                            f"\n[HTTP 403 Forbidden] Download failed for {local_path}!\n"
+                            f"Target URL: {download_url_info}\n"
+                            f"Possible causes:\n"
+                            f"1. Missing or invalid authentication token. Currently, HF_TOKEN is {hf_status} and CIVITAI_API_TOKEN is {civitai_status}.\n"
+                            f"2. You may need to visit the model host's page (HuggingFace or Civitai) and accept the terms of service/license agreement before downloading.\n"
+                        )
+                    else:
+                        logger.error(
+                            f"Download failed for {local_path}: {err_msg}"
+                        )
                     raise RuntimeError(
-                        f"Failed to download {local_path}: {current_dl.error_message}"
+                        f"Failed to download {local_path}: {err_msg}"
                     )
                 else:
                     pending_tasks.append((local_path, models_list, current_dl))

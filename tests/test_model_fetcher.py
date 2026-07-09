@@ -74,3 +74,35 @@ def test_fetcher_deduplicates_duplicate_models(fetcher, mock_aria2):
     assert res[dyn_model1] == res[dyn_model2]
 
 
+def test_fetcher_403_error_logging(fetcher, mock_aria2):
+    """Test that a detailed 403 error message is logged when a 403 response status code is encountered."""
+    mock_api_instance = mock_aria2.return_value
+    mock_dl = MagicMock()
+    mock_dl.gid = "err403"
+    mock_dl.has_failed = True
+    mock_dl.is_complete = False
+    mock_dl.error_code = 22
+    mock_dl.error_message = "The response status is not successful. status=403"
+    
+    mock_file = MagicMock()
+    mock_file.uris = [{"uri": "https://httpbin.org/status/403"}]
+    mock_dl.files = [mock_file]
+    
+    mock_api_instance.add_uris.return_value = mock_dl
+    mock_api_instance.get_downloads.return_value = [mock_dl]
+    
+    dyn_model = DynamicModel(url="https://httpbin.org/status/403", provider="direct_url", category="Dynamic", filename="test_403.safetensors")
+    
+    with patch('ai_pipeline_toolbox.components.model_fetcher.logger') as mock_logger:
+        with pytest.raises(RuntimeError, match="Failed to download"):
+            fetcher.fetch([dyn_model])
+            
+        mock_logger.error.assert_called_once()
+        log_call_arg = mock_logger.error.call_args[0][0]
+        assert "[HTTP 403 Forbidden]" in log_call_arg
+        assert "HF_TOKEN" in log_call_arg
+        assert "CIVITAI_API_TOKEN" in log_call_arg
+        assert "https://httpbin.org/status/403" in log_call_arg
+
+
+
