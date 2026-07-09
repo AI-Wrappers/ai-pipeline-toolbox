@@ -25,7 +25,7 @@ def test_fetcher_enum_models(fetcher, mock_aria2):
     mock_dl = MagicMock()
     mock_dl.gid = "123"
     mock_dl.is_complete = True
-    mock_api_instance.add_uris.return_value = [mock_dl]
+    mock_api_instance.add_uris.return_value = mock_dl
     mock_api_instance.get_downloads.return_value = [mock_dl]
     
     fetcher.fetch([Checkpoints.STABLE_DIFFUSION_V2_1, Vae.FLUX1D, TextEncoders.CLIP_L])
@@ -42,7 +42,7 @@ def test_fetcher_dynamic_model(fetcher, mock_aria2):
     mock_dl = MagicMock()
     mock_dl.gid = "123"
     mock_dl.is_complete = True
-    mock_api_instance.add_uris.return_value = [mock_dl]
+    mock_api_instance.add_uris.return_value = mock_dl
     mock_api_instance.get_downloads.return_value = [mock_dl]
     
     dyn_model = DynamicModel(url="https://civitai.com/api/download/models/12345", provider="civitai", category="Dynamic")

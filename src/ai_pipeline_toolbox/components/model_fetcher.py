@@ -141,7 +141,7 @@ class ModelFetcher(BaseFetcher):
             logger.info(f"Adding download for {filename} from {download_url} with provider {provider}")
             try:
                 download = self.aria2.add_uris([download_url], options=options)
-                download_tasks.append((model, local_path, download[0]))
+                download_tasks.append((model, local_path, download))
             except Exception as e:
                 logger.error(f"Failed to add download for {download_url}: {e}")
                 raise
