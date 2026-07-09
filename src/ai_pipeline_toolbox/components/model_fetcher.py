@@ -58,6 +58,7 @@ class ModelFetcher(BaseFetcher):
                     f"--rpc-listen-port={current_port}",
                     "--rpc-listen-all=false",
                     "--daemon=false",  # Keep it as child process to terminate easily
+                    "--max-concurrent-downloads=1",
                     f"--dir={self.cache_dir}",
                 ]
                 self.daemon_process = subprocess.Popen(
@@ -91,7 +92,6 @@ class ModelFetcher(BaseFetcher):
         self, models: List[Union[Enum, DynamicModel]]
     ) -> Dict[Union[Enum, DynamicModel], str]:
         local_paths = {}
-        download_tasks = []
 
         # Group models by their destination local_path
         # and resolve target directories/filenames first
@@ -181,20 +181,15 @@ class ModelFetcher(BaseFetcher):
             )
             try:
                 download = self.aria2.add_uris([download_url], options=options)
-                download_tasks.append((local_path, models_list, download))
             except Exception as e:
                 logger.error(f"Failed to add download for {download_url}: {e}")
                 raise
 
-        # Wait for all downloads to finish
-        while download_tasks:
-            # Refresh all downloads status
-            downloads = self.aria2.get_downloads()
-            download_dict = {d.gid: d for d in downloads}
+            # Wait for this single download to finish before proceeding to the next
+            while True:
+                downloads = self.aria2.get_downloads()
+                current_dl = next((d for d in downloads if d.gid == download.gid), None)
 
-            pending_tasks = []
-            for local_path, models_list, dl in download_tasks:
-                current_dl = download_dict.get(dl.gid)
                 if not current_dl:
                     # Depending on aria2 behavior, if it's completed it might still be in the list
                     # or it might have been purged. Safe assumption: if we can't find it, we need to check the file.
@@ -203,13 +198,14 @@ class ModelFetcher(BaseFetcher):
                             local_paths[model] = str(local_path)
                     else:
                         raise RuntimeError(
-                            f"Download task {dl.gid} disappeared and file not found."
+                            f"Download task {download.gid} disappeared and file not found."
                         )
-                    continue
+                    break
 
                 if current_dl.is_complete:
                     for model in models_list:
                         local_paths[model] = str(local_path)
+                    break
                 elif current_dl.has_failed:
                     err_msg = current_dl.error_message or ""
                     # Check for HTTP 403 Forbidden
@@ -238,11 +234,7 @@ class ModelFetcher(BaseFetcher):
                     raise RuntimeError(
                         f"Failed to download {local_path}: {err_msg}"
                     )
-                else:
-                    pending_tasks.append((local_path, models_list, current_dl))
 
-            download_tasks = pending_tasks
-            if download_tasks:
                 time.sleep(2)
 
         return local_paths
