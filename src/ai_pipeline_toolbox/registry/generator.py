@@ -4,15 +4,6 @@ import re
 import argparse
 from pathlib import Path
 
-def extract_civitai_version(urn: str) -> str:
-    """Extracts the model version ID from a URN."""
-    if '@' in urn:
-        return urn.split('@')[-1]
-    match = re.search(r'(\d+)$', urn)
-    if match:
-        return match.group(1)
-    return ""
-
 def generate_enums(yaml_path: Path, output_path: Path):
     if not yaml_path.exists():
         print(f"Error: {yaml_path} not found.")
@@ -35,10 +26,6 @@ def generate_enums(yaml_path: Path, output_path: Path):
             else:
                 for key, val in enum_values.items():
                     safe_key = str(key).upper().replace("-", "_").replace(".", "_")
-                    
-                    if isinstance(val, dict):
-                        if val.get("provider") == "civitai" and "urn" in val:
-                            val["model_version_id"] = extract_civitai_version(val["urn"])
                     
                     val_str = repr(val)
                     lines.append(f'    {safe_key} = {val_str}')

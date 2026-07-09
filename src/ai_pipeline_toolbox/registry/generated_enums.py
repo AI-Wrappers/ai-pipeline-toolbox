@@ -2,16 +2,25 @@
 from enum import Enum
 
 class Checkpoints(Enum):
-    FLUX_DEV = {'provider': 'huggingface', 'repo_id': 'black-forest-labs/FLUX.1-dev'}
-    FLUX_SCHNELL = {'provider': 'huggingface', 'repo_id': 'black-forest-labs/FLUX.1-schnell'}
-    DREAMSHAPER = {'provider': 'civitai', 'url': 'https://civitai.com/models/4384/dreamshaper', 'urn': 'urn:air:sd1:checkpoint:civitai:4384@128713', 'model_version_id': '128713'}
+    STABLE_DIFFUSION_V2_1 = {'provider': 'huggingface', 'download_url': 'https://huggingface.co/kharma1/ccsr_v2_repost/resolve/main/SD_v2.1_checkpoint.safetensors'}
+
+class Controlnet(Enum):
+    CCSR_V2_UPSCALER_CONTROLNET = {'provider': 'huggingface', 'download_url': 'https://huggingface.co/kharma1/ccsr_v2_repost/resolve/main/ccsr_v2_controlnet.safetensors'}
 
 class Vae(Enum):
-    AE = {'provider': 'huggingface', 'repo_id': 'black-forest-labs/FLUX.1-dev-ae'}
+    CCSR_V2_UPSCALER_VAE = {'provider': 'huggingface', 'download_url': 'https://huggingface.co/kharma1/ccsr_v2_repost/resolve/main/ccsr_v2_vae.safetensors'}
+    FLUX1D = {'provider': 'huggingface', 'download_url': 'https://huggingface.co/black-forest-labs/FLUX.1-dev/resolve/main/ae.safetensors'}
 
-class Clip(Enum):
-    CLIP_L = {'provider': 'huggingface', 'repo_id': 'openai/clip-vit-large-patch14'}
-    T5XXL = {'provider': 'huggingface', 'repo_id': 'google/t5-v1_1-xxl'}
+class DiT(Enum):
+    FLUX1D = {'provider': 'huggingface', 'download_url': 'https://huggingface.co/black-forest-labs/FLUX.1-dev/resolve/main/flux1-dev.safetensors'}
+    FLUX1S = {'provider': 'huggingface', 'download_url': 'https://huggingface.co/black-forest-labs/FLUX.1-schnell/resolve/main/flux1-schnell.safetensors'}
+    FLUX1D8Q = {'provider': 'huggingface', 'download_url': 'https://huggingface.co/city96/FLUX.1-dev-gguf/resolve/main/flux1-dev-Q8_0.gguf'}
 
-class Upscalers(Enum):
-    ESRGAN_4X = {'provider': 'openmodeldb', 'url': 'https://huggingface.co/tsunemori/esrgan/resolve/main/4x_ESRGAN.pth', 'filename': '4x_ESRGAN.pth'}
+class RmbgModels(Enum):
+    BRIIA_RMBG_V2 = {'provider': 'huggingface', 'download_url': 'https://huggingface.co/briaai/RMBG-2.0/resolve/main/model.safetensors'}
+
+class TextEncoders(Enum):
+    CLIP_L = {'provider': 'huggingface', 'download_url': 'https://huggingface.co/comfyanonymous/flux_text_encoders/resolve/main/clip_l.safetensors'}
+    CLIP_T5XXL_FP16 = {'provider': 'huggingface', 'download_url': 'https://huggingface.co/comfyanonymous/flux_text_encoders/resolve/main/t5xxl_fp16.safetensors'}
+    CLIP_T5XXL_FP8 = {'provider': 'huggingface', 'download_url': 'https://huggingface.co/comfyanonymous/flux_text_encoders/resolve/main/t5xxl_fp8_e4m3fn.safetensors'}
+    CLIP_T5XXL_FP8_SCALED = {'provider': 'huggingface', 'download_url': 'https://huggingface.co/comfyanonymous/flux_text_encoders/resolve/main/t5xxl_fp8_e4m3fn_scaled.safetensors'}

@@ -1,32 +1,47 @@
 Checkpoints:
-  flux_dev:
+  stable_diffusion_v2_1:
     provider: huggingface
-    repo_id: black-forest-labs/FLUX.1-dev
-  
-  flux_schnell:
+    download_url: https://huggingface.co/kharma1/ccsr_v2_repost/resolve/main/SD_v2.1_checkpoint.safetensors
+
+Controlnet:
+  ccsr_v2_upscaler_controlnet:
     provider: huggingface
-    repo_id: black-forest-labs/FLUX.1-schnell
-    
-  dreamshaper:
-    provider: civitai
-    url: https://civitai.com/models/4384/dreamshaper
-    urn: urn:air:sd1:checkpoint:civitai:4384@128713
+    download_url: https://huggingface.co/kharma1/ccsr_v2_repost/resolve/main/ccsr_v2_controlnet.safetensors
 
 Vae:
-  ae:
+  ccsr_v2_upscaler_vae:
     provider: huggingface
-    repo_id: black-forest-labs/FLUX.1-dev-ae
+    download_url: https://huggingface.co/kharma1/ccsr_v2_repost/resolve/main/ccsr_v2_vae.safetensors
+  flux1D:
+    provider: huggingface
+    download_url: https://huggingface.co/black-forest-labs/FLUX.1-dev/resolve/main/ae.safetensors
 
-Clip:
+DiT:
+  flux1D:
+    provider: huggingface
+    download_url: https://huggingface.co/black-forest-labs/FLUX.1-dev/resolve/main/flux1-dev.safetensors
+  flux1S:
+    provider: huggingface
+    download_url: https://huggingface.co/black-forest-labs/FLUX.1-schnell/resolve/main/flux1-schnell.safetensors
+  flux1D8Q:
+    provider: huggingface
+    download_url: https://huggingface.co/city96/FLUX.1-dev-gguf/resolve/main/flux1-dev-Q8_0.gguf
+
+RmbgModels:
+  briia_rmbg_v2:
+    provider: huggingface
+    download_url: https://huggingface.co/briaai/RMBG-2.0/resolve/main/model.safetensors
+
+TextEncoders:
   clip_l:
     provider: huggingface
-    repo_id: openai/clip-vit-large-patch14
-  t5xxl:
+    download_url: https://huggingface.co/comfyanonymous/flux_text_encoders/resolve/main/clip_l.safetensors
+  clip_t5xxl_fp16:
     provider: huggingface
-    repo_id: google/t5-v1_1-xxl
-    
-Upscalers:
-  esrgan_4x:
-    provider: openmodeldb
-    url: https://huggingface.co/tsunemori/esrgan/resolve/main/4x_ESRGAN.pth
-    filename: 4x_ESRGAN.pth
+    download_url: https://huggingface.co/comfyanonymous/flux_text_encoders/resolve/main/t5xxl_fp16.safetensors
+  clip_t5xxl_fp8:
+    provider: huggingface
+    download_url: https://huggingface.co/comfyanonymous/flux_text_encoders/resolve/main/t5xxl_fp8_e4m3fn.safetensors
+  clip_t5xxl_fp8_scaled:
+    provider: huggingface
+    download_url: https://huggingface.co/comfyanonymous/flux_text_encoders/resolve/main/t5xxl_fp8_e4m3fn_scaled.safetensors
