@@ -11,6 +11,7 @@ class Category(str, Enum):
     CONTROLNET = "Controlnet"
     DIT = "DiT"
     DYNAMIC = "Dynamic"
+    LORA = "Lora"
     RMBGMODELS = "RmbgModels"
     TEXTENCODERS = "TextEncoders"
     VAE = "Vae"

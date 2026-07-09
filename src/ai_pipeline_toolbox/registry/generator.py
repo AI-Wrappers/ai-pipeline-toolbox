@@ -38,6 +38,7 @@ def generate_enums(yaml_path: Path, output_path: Path):
         # Generate Category Enum
         categories = set(data.keys())
         categories.add("Dynamic")
+        categories.add("Lora")
         
         lines.append("class Category(str, Enum):")
         for c in sorted(categories):
