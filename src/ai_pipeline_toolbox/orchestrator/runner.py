@@ -1,14 +1,18 @@
 import logging
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Generic, TypeVar
 from ai_pipeline_toolbox.core.interfaces import (
-    BaseLoopManager, BaseStateManager, BaseDownloader, 
+    BaseLoopManager, BaseStateManager, BaseFetcher, 
     BaseResultSaver, BaseWorkloadProcessor
 )
 from ai_pipeline_toolbox.core.pipeline import BaseGenerationPipeline
 
 logger = logging.getLogger(__name__)
 
-class Runner:
+ConfigType = TypeVar('ConfigType')
+WorkloadType = TypeVar('WorkloadType')
+ReturnType = TypeVar('ReturnType')
+
+class Runner(Generic[ConfigType, WorkloadType, ReturnType]):
     """
     The orchestrator that manages the execution flow of the pipeline.
     """
@@ -16,21 +20,21 @@ class Runner:
         self,
         workload_processor: BaseWorkloadProcessor,
         state_manager: BaseStateManager,
-        downloader: BaseDownloader,
+        fetcher: BaseFetcher,
         loop_manager: BaseLoopManager,
-        result_saver: BaseResultSaver,
+        result_saver: BaseResultSaver[ReturnType],
     ):
         self.workload_processor = workload_processor
         self.state_manager = state_manager
-        self.downloader = downloader
+        self.fetcher = fetcher
         self.loop_manager = loop_manager
         self.result_saver = result_saver
 
     def run(
         self,
-        pipeline: BaseGenerationPipeline,
+        pipeline: BaseGenerationPipeline[ConfigType, WorkloadType, ReturnType],
         raw_workload: Any,
-        config: Any
+        config: ConfigType
     ):
         """
         Executes the main pipeline flow.
@@ -56,8 +60,13 @@ class Runner:
             logger.info("No pending tasks to execute.")
             return
 
-        # 4. Call ModelDownloader to ensure dependencies are met
-        models_paths = self.downloader.download(pipeline.required_models)
+        # 4. Extract dynamic models and fetch dependencies
+        dynamic_models = []
+        for task in pending_tasks:
+            dynamic_models.extend(pipeline.get_dynamic_models(task))
+            
+        models_to_fetch = list(pipeline.required_models) + dynamic_models
+        models_paths = self.fetcher.fetch(models_to_fetch)
         
         # 5. Instantiates the Pipeline with downloaded model paths
         pipeline.setup(models_paths)

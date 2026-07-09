@@ -1,6 +1,8 @@
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Iterable, List
+from typing import Any, Dict, Iterable, List, Union, Generic, TypeVar
 from enum import Enum
+
+ReturnType = TypeVar('ReturnType')
 
 class BaseLoopManager(ABC):
     """Implements queue logic and iterates over the workload."""
@@ -28,19 +30,19 @@ class BaseStateManager(ABC):
         """Marks a task as failed and records the error."""
         pass
 
-class BaseDownloader(ABC):
-    """Downloads missing weights and returns local paths."""
+class BaseFetcher(ABC):
+    """Fetches missing weights and returns local paths."""
     
     @abstractmethod
-    def download(self, required_models: List[Enum]) -> Dict[Enum, str]:
-        """Maps Enums to real Hub paths, downloads weights, returns local paths."""
+    def fetch(self, models: List[Union[Enum, str]]) -> Dict[Union[Enum, str], str]:
+        """Maps Enums or URL strings to local paths, downloads weights, returns local paths."""
         pass
 
-class BaseResultSaver(ABC):
+class BaseResultSaver(ABC, Generic[ReturnType]):
     """Dynamically constructs output directory trees and saves results."""
     
     @abstractmethod
-    def save(self, result: Any, metadata: Dict[str, Any]) -> str:
+    def save(self, result: ReturnType, metadata: Dict[str, Any]) -> str:
         """Saves the result based on metadata and returns the path."""
         pass
 

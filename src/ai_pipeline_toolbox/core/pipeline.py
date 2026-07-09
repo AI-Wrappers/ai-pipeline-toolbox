@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Generic, TypeVar, Dict, List
+from typing import Generic, TypeVar, Dict, List, Union
 from enum import Enum
 
 ConfigType = TypeVar('ConfigType')
@@ -15,7 +15,7 @@ class BaseGenerationPipeline(ABC, Generic[ConfigType, WorkloadType, ReturnType])
     required_models: List[Enum] = []
     
     @abstractmethod
-    def setup(self, models_paths: Dict[Enum, str]) -> None:
+    def setup(self, models_paths: Dict[Union[Enum, str], str]) -> None:
         """
         Initializes models into memory using the provided local paths.
         
@@ -23,6 +23,18 @@ class BaseGenerationPipeline(ABC, Generic[ConfigType, WorkloadType, ReturnType])
             models_paths: Mapping of Enum model identifiers to local directory paths.
         """
         pass
+        
+    def get_dynamic_models(self, workload: WorkloadType) -> List[str]:
+        """
+        Extracts dynamically required models (e.g., LoRAs) from a workload.
+        
+        Args:
+            workload: A single validated task/workload item.
+            
+        Returns:
+            A list of string URLs pointing to dynamic models.
+        """
+        return []
         
     @abstractmethod
     def __call__(self, config: ConfigType, workload: WorkloadType) -> ReturnType:

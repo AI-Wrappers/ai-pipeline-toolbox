@@ -5,30 +5,33 @@ from enum import Enum
 from ai_pipeline_toolbox.orchestrator.runner import Runner
 from ai_pipeline_toolbox.components.workload_processor import PydanticWorkloadProcessor
 from ai_pipeline_toolbox.components.state_manager import SQLiteStateManager
-from ai_pipeline_toolbox.components.model_downloader import ModelDownloader
+from ai_pipeline_toolbox.components.model_fetcher import ModelFetcher
 from ai_pipeline_toolbox.components.loop_manager import LoopManager
-from ai_pipeline_toolbox.components.result_saver import LocalResultSaver
+from ai_pipeline_toolbox.components.result_saver import TextResultSaver
 from ai_pipeline_toolbox.pipelines.example_flux_pipeline import ExampleFluxPipeline, FluxWorkload, FluxConfig
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-class MockDownloader(ModelDownloader):
-    def download(self, required_models: List[Enum]) -> Dict[Enum, str]:
-        logging.info(f"Mock downloading models: {[m.name for m in required_models]}")
+class MockFetcher(ModelFetcher):
+    """
+    Mock fetcher that just returns the URLs as paths to avoid downloading.
+    """
+    def fetch(self, required_models: List[Enum]) -> Dict[Enum, str]:
+        logging.info(f"Mock fetching models: {[m.name for m in required_models]}")
         return {m: f"/mock/path/{m.name}" for m in required_models}
 
 def main():
     # 1. Initialize Components (Dependency Injection)
     workload_processor = PydanticWorkloadProcessor(model_class=FluxWorkload)
     state_manager = SQLiteStateManager(db_path="data/state.db")
-    downloader = MockDownloader(cache_dir="data/models_cache")
+    fetcher = MockFetcher(cache_dir="data/models_cache")
     loop_manager = LoopManager()
-    result_saver = LocalResultSaver(output_dir="data/outputs")
+    result_saver = TextResultSaver(output_dir="data/outputs")
     
     runner = Runner(
         workload_processor=workload_processor,
         state_manager=state_manager,
-        downloader=downloader,
+        fetcher=fetcher,
         loop_manager=loop_manager,
         result_saver=result_saver
     )
