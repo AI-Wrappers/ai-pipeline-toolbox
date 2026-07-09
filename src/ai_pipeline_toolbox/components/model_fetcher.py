@@ -213,7 +213,7 @@ class ModelFetcher(BaseFetcher):
                 elif current_dl.has_failed:
                     err_msg = current_dl.error_message or ""
                     # Check for HTTP 403 Forbidden
-                    if current_dl.error_code == 22 and "403" in err_msg:
+                    if "403" in err_msg:
                         download_url_info = "unknown URL"
                         if current_dl.files and current_dl.files[0].uris:
                             first_uri = current_dl.files[0].uris[0]
