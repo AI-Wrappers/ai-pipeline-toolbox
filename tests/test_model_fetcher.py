@@ -49,8 +49,9 @@ def test_fetcher_dynamic_model(fetcher, mock_aria2):
     fetcher.fetch([dyn_model])
         
     mock_api_instance.add_uris.assert_called_once()
-    kwargs = mock_api_instance.add_uris.call_args[1]
-    assert "Authorization: Bearer mock_civitai" in kwargs['options'].get('header', [])
+    call_args = mock_api_instance.add_uris.call_args[0]
+    requested_url = call_args[0][0]
+    assert "token=mock_civitai" in requested_url
 
 def test_fetcher_deduplicates_duplicate_models(fetcher, mock_aria2):
     """Test that duplicate models resolving to the same local path are only downloaded once."""

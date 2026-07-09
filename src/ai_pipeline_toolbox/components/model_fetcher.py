@@ -143,7 +143,10 @@ class ModelFetcher(BaseFetcher):
                     headers.append(f"Authorization: Bearer {self.hf_token}")
             elif provider == "civitai":
                 if self.civitai_token:
-                    headers.append(f"Authorization: Bearer {self.civitai_token}")
+                    if "?" in download_url:
+                        download_url = f"{download_url}&token={self.civitai_token}"
+                    else:
+                        download_url = f"{download_url}?token={self.civitai_token}"
                     
             options = {
                 "dir": str(target_dir),
