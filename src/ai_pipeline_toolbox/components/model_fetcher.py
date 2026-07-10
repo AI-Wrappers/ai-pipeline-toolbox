@@ -4,13 +4,13 @@ import socket
 import logging
 import subprocess
 from pathlib import Path
-from typing import List, Dict, Union, Optional
+from typing import List, Dict, Union, Optional, Tuple, Set, Any
 from enum import Enum
 
 import aria2p
 from ai_pipeline_toolbox.core.interfaces import BaseFetcher
 from ai_pipeline_toolbox.core.models import DynamicModel
-from ai_pipeline_toolbox.registry.generated_enums import Category
+from ai_pipeline_toolbox.registry.generated_enums import Category, Provider
 
 logger = logging.getLogger(__name__)
 
@@ -29,17 +29,28 @@ class ModelFetcher(BaseFetcher):
         civitai_token: Optional[str] = None,
         max_concurrent_downloads: int = 3,
         max_connections_for_provider: Optional[Dict[str, int]] = None,
+        tokens_for_provider: Optional[Dict[str, str]] = None,
     ):
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         self.port = start_port
-        self.hf_token = hf_token or os.environ.get("HF_TOKEN")
-        self.civitai_token = civitai_token or os.environ.get("CIVITAI_API_TOKEN")
+
+        self.tokens_for_provider = {
+            Provider.HUGGINGFACE: hf_token or os.environ.get("HF_TOKEN"),
+            Provider.CIVITAI: civitai_token or os.environ.get("CIVITAI_API_TOKEN"),
+        }
+        if tokens_for_provider:
+            self.tokens_for_provider.update(tokens_for_provider)
+
+        # For backward compatibility
+        self.hf_token = self.tokens_for_provider.get(Provider.HUGGINGFACE)
+        self.civitai_token = self.tokens_for_provider.get(Provider.CIVITAI)
+
         self.max_concurrent_downloads = max_concurrent_downloads
 
         self.max_connections_for_provider = {
-            "huggingface": 8,
-            "civitai": 2,
+            Provider.HUGGINGFACE: 8,
+            Provider.CIVITAI: 2,
         }
         if max_connections_for_provider:
             self.max_connections_for_provider.update(max_connections_for_provider)
@@ -112,10 +123,9 @@ class ModelFetcher(BaseFetcher):
             "split": str(allocated_connections),
         }
         headers = []
-        if provider == "huggingface" and self.hf_token:
-            headers.append(f"Authorization: Bearer {self.hf_token}")
-        elif provider == "civitai" and self.civitai_token:
-            headers.append(f"Authorization: Bearer {self.civitai_token}")
+        token = self.tokens_for_provider.get(provider)
+        if token:
+            headers.append(f"Authorization: Bearer {token}")
 
         if headers:
             options["header"] = headers
@@ -141,10 +151,9 @@ class ModelFetcher(BaseFetcher):
                 fallback_headers = {
                     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
                 }
-                if provider == "civitai" and self.civitai_token:
-                    fallback_headers["Authorization"] = f"Bearer {self.civitai_token}"
-                elif provider == "huggingface" and self.hf_token:
-                    fallback_headers["Authorization"] = f"Bearer {self.hf_token}"
+                token = self.tokens_for_provider.get(provider)
+                if token:
+                    fallback_headers["Authorization"] = f"Bearer {token}"
 
                 req = urllib.request.Request(
                     download_url,
@@ -174,67 +183,66 @@ class ModelFetcher(BaseFetcher):
         else:
             raise RuntimeError("Failed to download after max retries due to HTTP 429 rate limiting.")
 
-    def fetch(
+    def _resolve_model_details(
+        self, model: Union[Enum, DynamicModel]
+    ) -> Tuple[str, str, str, Path, Path]:
+        """Resolves model provider, download URL, filename, target directory, and destination path."""
+        if isinstance(model, Enum):
+            config = model.value
+            provider = config.get("provider")
+            download_url = config.get("download_url")
+
+            category_name = type(model).__name__
+            ext = Path(download_url).suffix
+            filename = f"{model.name}{ext}"
+            sub_dir = Category(category_name).value
+        elif isinstance(model, DynamicModel):
+            provider = model.provider
+            download_url = model.url
+            filename = (
+                model.filename
+                or download_url.split("/")[-1]
+                or "downloaded_model.bin"
+            )
+            # Autodetect provider from domain if not explicitly set and direct_url is default
+            if provider == "direct_url":
+                if "huggingface.co" in download_url:
+                    provider = "huggingface"
+                elif "civitai.com" in download_url:
+                    provider = "civitai"
+
+            # If model.category is Enum class it will be parsed to str, then we validate via Category
+            cat_val = (
+                model.category.value
+                if isinstance(model.category, Enum)
+                else model.category
+            )
+            sub_dir = Category(cat_val).value
+        else:
+            raise ValueError(f"Unsupported model type: {type(model)}")
+
+        target_dir = self.cache_dir / sub_dir
+        local_path = target_dir / filename
+        
+        # Ensure provider is a string (even if it's a Provider Enum subclass)
+        provider_name = provider.value if isinstance(provider, Enum) else str(provider)
+        
+        return provider_name, download_url, filename, target_dir, local_path
+
+    def _prepare_tasks_queue(
         self, models: List[Union[Enum, DynamicModel]]
-    ) -> Dict[Union[Enum, DynamicModel], str]:
-        from concurrent.futures import ThreadPoolExecutor
-
+    ) -> Tuple[Dict[Union[Enum, DynamicModel], str], Dict[Path, Dict[str, Any]]]:
+        """Groups models, checks for existing cache, and prepares the pending tasks queue."""
         local_paths = {}
-
-        # Group models by their destination local_path
-        # and resolve target directories/filenames first
         models_by_path = {}
-        model_details = {}  # local_path -> (provider, download_url, filename, target_dir)
+        model_details = {}
 
         for model in models:
-            if isinstance(model, Enum):
-                config = model.value
-                provider = config.get("provider")
-                download_url = config.get("download_url")
-
-                category_name = type(model).__name__
-                ext = Path(download_url).suffix
-                filename = f"{model.name}{ext}"
-                sub_dir = Category(category_name).value
-            elif isinstance(model, DynamicModel):
-                provider = model.provider
-                download_url = model.url
-                filename = (
-                    model.filename
-                    or download_url.split("/")[-1]
-                    or "downloaded_model.bin"
-                )
-                # Autodetect provider from domain if not explicitly set and direct_url is default
-                if provider == "direct_url":
-                    if "huggingface.co" in download_url:
-                        provider = "huggingface"
-                    elif "civitai.com" in download_url:
-                        provider = "civitai"
-
-                # If model.category is Enum class it will be parsed to str, then we validate via Category
-                # model.category is a str or Category here because of validation in DynamicModel
-                cat_val = (
-                    model.category.value
-                    if isinstance(model.category, Enum)
-                    else model.category
-                )
-                sub_dir = Category(cat_val).value
-            else:
-                raise ValueError(f"Unsupported model type: {type(model)}")
-
-            target_dir = self.cache_dir / sub_dir
-            local_path = target_dir / filename
-
+            provider, download_url, filename, target_dir, local_path = self._resolve_model_details(model)
             models_by_path.setdefault(local_path, []).append(model)
             if local_path not in model_details:
-                model_details[local_path] = (
-                    provider,
-                    download_url,
-                    filename,
-                    target_dir,
-                )
+                model_details[local_path] = (provider, download_url, filename, target_dir)
 
-        # Initialize the scheduling tasks queue
         tasks = {}
         for local_path, models_list in models_by_path.items():
             if local_path.exists():
@@ -253,12 +261,181 @@ class ModelFetcher(BaseFetcher):
                     "allocated_connections": 0,
                     "403_count": 0,
                 }
+        return local_paths, tasks
 
-        # If all requested models are already cached
+    def _try_start_pending_tasks(
+        self,
+        tasks: Dict[Path, Dict[str, Any]],
+        active_tasks: List[Dict[str, Any]],
+        active_conns: Dict[str, int],
+        newly_started_gids: Set[str],
+    ) -> None:
+        """Starts pending tasks that fit within concurrency slots and connection limits."""
+        for local_path, task in tasks.items():
+            if task["status"] != "pending":
+                continue
+
+            # Limit check 1: Max concurrent downloads slot
+            if len(active_tasks) >= self.max_concurrent_downloads:
+                break
+
+            p = task["provider"]
+            max_p_conn = self.max_connections_for_provider.get(p, 4)
+            current_p_conn = active_conns.get(p, 0)
+
+            # Limit check 2: Connections available for provider
+            available_conns = max_p_conn - current_p_conn
+            if available_conns >= 1:
+                allocated = min(available_conns, max_p_conn)
+                task["allocated_connections"] = allocated
+                
+                task["target_dir"].mkdir(parents=True, exist_ok=True)
+                options = self._get_download_options(
+                    p, task["filename"], task["target_dir"], allocated
+                )
+
+                logger.info(
+                    f"Starting download for {task['filename']} from {task['download_url']} "
+                    f"via provider {p} (allocated {allocated} connections)"
+                )
+                try:
+                    download = self.aria2.add_uris([task["download_url"]], options=options)
+                    task["gid"] = download.gid
+                    task["status"] = "downloading"
+                    newly_started_gids.add(download.gid)
+                    
+                    # Update active tasks and connections list for subsequent pending items in this iteration
+                    active_tasks.append(task)
+                    active_conns[p] = active_conns.get(p, 0) + allocated
+                except Exception as e:
+                    logger.error(f"Failed to add download for {task['download_url']}: {e}")
+                    task["status"] = "failed"
+                    raise
+
+    def _monitor_aria_downloads(
+        self,
+        tasks: Dict[Path, Dict[str, Any]],
+        downloads: List[Any],
+        newly_started_gids: Set[str],
+        executor: Any,
+        fallback_futures: Dict[Any, Path],
+        local_paths: Dict[Any, str],
+    ) -> None:
+        """Monitors active aria2 downloads, handling completion, failed tasks, and fallbacks."""
+        for local_path, task in tasks.items():
+            if task["status"] != "downloading":
+                continue
+
+            if task["gid"] in newly_started_gids:
+                continue
+
+            current_dl = next((d for d in downloads if d.gid == task["gid"]), None)
+
+            if not current_dl:
+                # Check if the file was downloaded successfully despite disappearing
+                if local_path.exists():
+                    task["status"] = "completed"
+                    task["allocated_connections"] = 0
+                    for model in task["models"]:
+                        local_paths[model] = str(local_path)
+                else:
+                    task["status"] = "failed"
+                    task["allocated_connections"] = 0
+                    raise RuntimeError(
+                        f"Download task {task['gid']} disappeared and file not found."
+                    )
+                continue
+
+            if current_dl.is_complete:
+                task["status"] = "completed"
+                task["allocated_connections"] = 0
+                for model in task["models"]:
+                    local_paths[model] = str(local_path)
+            elif current_dl.has_failed:
+                err_msg = current_dl.error_message or ""
+                try:
+                    current_dl.remove(force=True, files=True)
+                except Exception:
+                    pass
+
+                # Check for HTTP 403 Forbidden for retry
+                if "403" in err_msg and task["403_count"] < 1:
+                    task["403_count"] += 1
+                    logger.warning(
+                        f"Download for {task['filename']} failed with HTTP 403 Forbidden. "
+                        f"Retrying via aria2c (attempt {task['403_count']}/2)..."
+                    )
+                    try:
+                        options = self._get_download_options(
+                            task["provider"], task["filename"], task["target_dir"], task["allocated_connections"]
+                        )
+                        download = self.aria2.add_uris([task["download_url"]], options=options)
+                        task["gid"] = download.gid
+                        newly_started_gids.add(download.gid)
+                    except Exception as e:
+                        logger.error(f"Failed to retry download for {task['download_url']}: {e}")
+                        task["status"] = "failed"
+                        task["allocated_connections"] = 0
+                        raise
+                else:
+                    # Fallback to python download
+                    task["status"] = "fallback"
+                    task["allocated_connections"] = 1
+
+                    hf_status = "set" if self.hf_token else "not set"
+                    civitai_status = "set" if self.civitai_token else "not set"
+                    logger.warning(
+                        f"\n[HTTP 403 Forbidden] Download failed via aria2c twice for {local_path}!\n"
+                        f"Target URL: {task['download_url']}\n"
+                        f"Possible causes:\n"
+                        f"1. Missing or invalid authentication token. Currently, HF_TOKEN is {hf_status} and CIVITAI_API_TOKEN is {civitai_status}.\n"
+                        f"2. Cloudflare or host blocked the request (e.g. TLS fingerprinting of aria2c).\n"
+                        f"Falling back to native Python download to bypass the block...\n"
+                    )
+                    future = executor.submit(
+                        self._python_fallback_download,
+                        local_path,
+                        task["provider"],
+                        task["download_url"]
+                    )
+                    fallback_futures[future] = local_path
+
+    def _monitor_fallback_downloads(
+        self,
+        tasks: Dict[Path, Dict[str, Any]],
+        fallback_futures: Dict[Any, Path],
+        local_paths: Dict[Any, str],
+    ) -> None:
+        """Monitors completed python fallback downloads and raises exceptions on failure."""
+        done_futures = [f for f in fallback_futures if f.done()]
+        for f in done_futures:
+            l_path = fallback_futures.pop(f)
+            task = tasks[l_path]
+            try:
+                f.result()
+                task["status"] = "completed"
+                task["allocated_connections"] = 0
+                for model in task["models"]:
+                    local_paths[model] = str(l_path)
+            except Exception as python_err:
+                logger.error(f"Python fallback download failed for {l_path}: {python_err}")
+                task["status"] = "failed"
+                task["allocated_connections"] = 0
+                raise RuntimeError(
+                    f"Failed to download {l_path} via both aria2c and Python fallback: {python_err}"
+                )
+
+    def fetch(
+        self, models: List[Union[Enum, DynamicModel]]
+    ) -> Dict[Union[Enum, DynamicModel], str]:
+        from concurrent.futures import ThreadPoolExecutor
+
+        # 1. Resolve and prepare tasks queue
+        local_paths, tasks = self._prepare_tasks_queue(models)
         if not tasks:
             return local_paths
 
-        # Execute fallback downloads using a thread pool
+        # 2. Main scheduling & monitoring loop
         with ThreadPoolExecutor(max_workers=self.max_concurrent_downloads) as executor:
             fallback_futures = {}  # future -> local_path
 
@@ -266,7 +443,7 @@ class ModelFetcher(BaseFetcher):
                 downloads = self.aria2.get_downloads()
                 newly_started_gids = set()
 
-                # 1. Count currently active tasks (downloading + fallback)
+                # Get currently active tasks (downloading + fallback)
                 active_tasks = [t for t in tasks.values() if t["status"] in ("downloading", "fallback")]
 
                 # Calculate sum of active connections per provider
@@ -275,144 +452,14 @@ class ModelFetcher(BaseFetcher):
                     p = t["provider"]
                     active_conns[p] = active_conns.get(p, 0) + t["allocated_connections"]
 
-                # 2. Try to start pending tasks
-                for local_path, task in tasks.items():
-                    if task["status"] != "pending":
-                        continue
+                # Try starting pending tasks
+                self._try_start_pending_tasks(tasks, active_tasks, active_conns, newly_started_gids)
 
-                    # Limit check 1: Max concurrent downloads slot
-                    if len(active_tasks) >= self.max_concurrent_downloads:
-                        break
+                # Monitor active aria2 tasks
+                self._monitor_aria_downloads(tasks, downloads, newly_started_gids, executor, fallback_futures, local_paths)
 
-                    p = task["provider"]
-                    max_p_conn = self.max_connections_for_provider.get(p, 4)
-                    current_p_conn = active_conns.get(p, 0)
-
-                    # Limit check 2: Connections available for provider
-                    available_conns = max_p_conn - current_p_conn
-                    if available_conns >= 1:
-                        allocated = min(available_conns, max_p_conn)
-                        task["allocated_connections"] = allocated
-                        
-                        task["target_dir"].mkdir(parents=True, exist_ok=True)
-                        options = self._get_download_options(
-                            p, task["filename"], task["target_dir"], allocated
-                        )
-
-                        logger.info(
-                            f"Starting download for {task['filename']} from {task['download_url']} "
-                            f"via provider {p} (allocated {allocated} connections)"
-                        )
-                        try:
-                            download = self.aria2.add_uris([task["download_url"]], options=options)
-                            task["gid"] = download.gid
-                            task["status"] = "downloading"
-                            newly_started_gids.add(download.gid)
-                            
-                            # Update local active state for this loop iteration
-                            active_tasks.append(task)
-                            active_conns[p] = active_conns.get(p, 0) + allocated
-                        except Exception as e:
-                            logger.error(f"Failed to add download for {task['download_url']}: {e}")
-                            task["status"] = "failed"
-                            raise
-
-                # 3. Monitor active aria2 tasks
-                for local_path, task in tasks.items():
-                    if task["status"] != "downloading":
-                        continue
-
-                    if task["gid"] in newly_started_gids:
-                        continue
-
-                    current_dl = next((d for d in downloads if d.gid == task["gid"]), None)
-
-                    if not current_dl:
-                        # If task is not in active aria2 queue, check if the file was downloaded successfully
-                        if local_path.exists():
-                            task["status"] = "completed"
-                            task["allocated_connections"] = 0
-                            for model in task["models"]:
-                                local_paths[model] = str(local_path)
-                        else:
-                            task["status"] = "failed"
-                            task["allocated_connections"] = 0
-                            raise RuntimeError(
-                                f"Download task {task['gid']} disappeared and file not found."
-                            )
-                        continue
-
-                    if current_dl.is_complete:
-                        task["status"] = "completed"
-                        task["allocated_connections"] = 0
-                        for model in task["models"]:
-                            local_paths[model] = str(local_path)
-                    elif current_dl.has_failed:
-                        err_msg = current_dl.error_message or ""
-                        try:
-                            current_dl.remove(force=True, files=True)
-                        except Exception:
-                            pass
-
-                        # Check for HTTP 403 Forbidden for retry
-                        if "403" in err_msg and task["403_count"] < 1:
-                            task["403_count"] += 1
-                            logger.warning(
-                                f"Download for {task['filename']} failed with HTTP 403 Forbidden. "
-                                f"Retrying via aria2c (attempt {task['403_count'] + 1}/2)..."
-                            )
-                            try:
-                                options = self._get_download_options(
-                                    task["provider"], task["filename"], task["target_dir"], task["allocated_connections"]
-                                )
-                                download = self.aria2.add_uris([task["download_url"]], options=options)
-                                task["gid"] = download.gid
-                            except Exception as e:
-                                logger.error(f"Failed to retry download for {task['download_url']}: {e}")
-                                task["status"] = "failed"
-                                task["allocated_connections"] = 0
-                                raise
-                        else:
-                            # Fallback to python download
-                            task["status"] = "fallback"
-                            task["allocated_connections"] = 1
-
-                            hf_status = "set" if self.hf_token else "not set"
-                            civitai_status = "set" if self.civitai_token else "not set"
-                            logger.warning(
-                                f"\n[HTTP 403 Forbidden] Download failed via aria2c twice for {local_path}!\n"
-                                f"Target URL: {task['download_url']}\n"
-                                f"Possible causes:\n"
-                                f"1. Missing or invalid authentication token. Currently, HF_TOKEN is {hf_status} and CIVITAI_API_TOKEN is {civitai_status}.\n"
-                                f"2. Cloudflare or host blocked the request (e.g. TLS fingerprinting of aria2c).\n"
-                                f"Falling back to native Python download to bypass the block...\n"
-                            )
-                            future = executor.submit(
-                                self._python_fallback_download,
-                                local_path,
-                                task["provider"],
-                                task["download_url"]
-                            )
-                            fallback_futures[future] = local_path
-
-                # 4. Monitor fallback downloads
-                done_futures = [f for f in fallback_futures if f.done()]
-                for f in done_futures:
-                    l_path = fallback_futures.pop(f)
-                    task = tasks[l_path]
-                    try:
-                        f.result()
-                        task["status"] = "completed"
-                        task["allocated_connections"] = 0
-                        for model in task["models"]:
-                            local_paths[model] = str(l_path)
-                    except Exception as python_err:
-                        logger.error(f"Python fallback download failed for {l_path}: {python_err}")
-                        task["status"] = "failed"
-                        task["allocated_connections"] = 0
-                        raise RuntimeError(
-                            f"Failed to download {l_path} via both aria2c and Python fallback: {python_err}"
-                        )
+                # Monitor fallback downloads
+                self._monitor_fallback_downloads(tasks, fallback_futures, local_paths)
 
                 time.sleep(2)
 
