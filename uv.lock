@@ -4,7 +4,7 @@ requires-python = ">=3.13"
 
 [[package]]
 name = "ai-pipeline-toolbox"
-version = "0.5.0"
+version = "0.6.0"
 source = { editable = "." }
 dependencies = [
     { name = "aria2p" },
