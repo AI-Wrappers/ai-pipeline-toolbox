@@ -92,6 +92,7 @@ class ModelFetcher(BaseFetcher):
         self, models: List[Union[Enum, DynamicModel]]
     ) -> Dict[Union[Enum, DynamicModel], str]:
         local_paths = {}
+        failed_403_counts = {}
 
         # Group models by their destination local_path
         # and resolve target directories/filenames first
@@ -168,10 +169,7 @@ class ModelFetcher(BaseFetcher):
                     headers.append(f"Authorization: Bearer {self.hf_token}")
             elif provider == "civitai":
                 if self.civitai_token:
-                    if "?" in download_url:
-                        download_url = f"{download_url}&token={self.civitai_token}"
-                    else:
-                        download_url = f"{download_url}?token={self.civitai_token}"
+                    headers.append(f"Authorization: Bearer {self.civitai_token}")
 
             if headers:
                 options["header"] = headers
@@ -210,6 +208,26 @@ class ModelFetcher(BaseFetcher):
                     err_msg = current_dl.error_message or ""
                     # Check for HTTP 403 Forbidden
                     if "403" in err_msg:
+                        # Increment 403 count for this download path
+                        failed_403_counts[local_path] = failed_403_counts.get(local_path, 0) + 1
+                        
+                        if failed_403_counts[local_path] < 2:
+                            try:
+                                current_dl.remove(force=True, files=True)
+                            except Exception:
+                                pass
+                            
+                            logger.warning(
+                                f"Download for {filename} failed with HTTP 403 Forbidden. "
+                                f"Retrying via aria2c (attempt {failed_403_counts[local_path] + 1}/2)..."
+                            )
+                            try:
+                                download = self.aria2.add_uris([download_url], options=options)
+                                continue
+                            except Exception as e:
+                                logger.error(f"Failed to retry download for {download_url}: {e}")
+                                raise
+
                         download_url_info = "unknown URL"
                         if current_dl.files and current_dl.files[0].uris:
                             first_uri = current_dl.files[0].uris[0]
@@ -220,20 +238,76 @@ class ModelFetcher(BaseFetcher):
 
                         hf_status = "set" if self.hf_token else "not set"
                         civitai_status = "set" if self.civitai_token else "not set"
-                        logger.error(
-                            f"\n[HTTP 403 Forbidden] Download failed for {local_path}!\n"
+                        logger.warning(
+                            f"\n[HTTP 403 Forbidden] Download failed via aria2c twice for {local_path}!\n"
                             f"Target URL: {download_url_info}\n"
                             f"Possible causes:\n"
                             f"1. Missing or invalid authentication token. Currently, HF_TOKEN is {hf_status} and CIVITAI_API_TOKEN is {civitai_status}.\n"
-                            f"2. You may need to visit the model host's page (HuggingFace or Civitai) and accept the terms of service/license agreement before downloading.\n"
+                            f"2. Cloudflare or host blocked the request (e.g. TLS fingerprinting of aria2c).\n"
+                            f"Falling back to native Python download to bypass the block...\n"
                         )
+                        try:
+                            import urllib.request
+                            import urllib.error
+                            import shutil
+                            
+                            # Add a brief cooldown sleep to allow Civitai server connection/limits to clear
+                            time.sleep(2)
+                            
+                            max_retries = 5
+                            retry_delay = 2.0
+                            for attempt in range(max_retries):
+                                try:
+                                    fallback_headers = {
+                                        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+                                    }
+                                    if provider == "civitai" and self.civitai_token:
+                                        fallback_headers["Authorization"] = f"Bearer {self.civitai_token}"
+                                    elif provider == "huggingface" and self.hf_token:
+                                        fallback_headers["Authorization"] = f"Bearer {self.hf_token}"
+
+                                    req = urllib.request.Request(
+                                        download_url, 
+                                        headers=fallback_headers
+                                    )
+                                    # Ensure parent directory exists
+                                    local_path.parent.mkdir(parents=True, exist_ok=True)
+                                    
+                                    # Download to a temporary file first, then rename to prevent partial file corruption
+                                    temp_path = local_path.with_suffix(local_path.suffix + ".tmp")
+                                    with urllib.request.urlopen(req) as response, open(temp_path, 'wb') as out_file:
+                                        shutil.copyfileobj(response, out_file)
+                                    temp_path.rename(local_path)
+                                    
+                                    logger.info(f"Successfully downloaded {local_path} using Python fallback!")
+                                    for model in models_list:
+                                        local_paths[model] = str(local_path)
+                                    break
+                                except urllib.error.HTTPError as http_err:
+                                    if http_err.code == 429 and attempt < max_retries - 1:
+                                        logger.warning(
+                                            f"HTTP 429 Too Many Requests when downloading via Python fallback. "
+                                            f"Retrying in {retry_delay} seconds (attempt {attempt + 1}/{max_retries})..."
+                                        )
+                                        time.sleep(retry_delay)
+                                        retry_delay *= 2.0
+                                    else:
+                                        raise
+                            else:
+                                raise RuntimeError("Failed to download after max retries due to HTTP 429 rate limiting.")
+                            break
+                        except Exception as python_err:
+                            logger.error(f"Python fallback download failed: {python_err}")
+                            raise RuntimeError(
+                                f"Failed to download {local_path} via both aria2c (403) and Python fallback: {python_err}"
+                            )
                     else:
                         logger.error(
                             f"Download failed for {local_path}: {err_msg}"
                         )
-                    raise RuntimeError(
-                        f"Failed to download {local_path}: {err_msg}"
-                    )
+                        raise RuntimeError(
+                            f"Failed to download {local_path}: {err_msg}"
+                        )
 
                 time.sleep(2)
 

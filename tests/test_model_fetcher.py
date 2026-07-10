@@ -49,9 +49,8 @@ def test_fetcher_dynamic_model(fetcher, mock_aria2):
     fetcher.fetch([dyn_model])
         
     mock_api_instance.add_uris.assert_called_once()
-    call_args = mock_api_instance.add_uris.call_args[0]
-    requested_url = call_args[0][0]
-    assert "token=mock_civitai" in requested_url
+    calls = mock_api_instance.add_uris.call_args_list
+    assert any("Authorization: Bearer mock_civitai" in kwargs['options'].get('header', []) for args, kwargs in calls)
 
 def test_fetcher_deduplicates_duplicate_models(fetcher, mock_aria2):
     """Test that duplicate models resolving to the same local path are only downloaded once."""
@@ -94,15 +93,57 @@ def test_fetcher_403_error_logging(fetcher, mock_aria2):
     dyn_model = DynamicModel(url="https://httpbin.org/status/403", provider="direct_url", category="Dynamic", filename="test_403.safetensors")
     
     with patch('ai_pipeline_toolbox.components.model_fetcher.logger') as mock_logger:
-        with pytest.raises(RuntimeError, match="Failed to download"):
-            fetcher.fetch([dyn_model])
-            
-        mock_logger.error.assert_called_once()
-        log_call_arg = mock_logger.error.call_args[0][0]
-        assert "[HTTP 403 Forbidden]" in log_call_arg
-        assert "HF_TOKEN" in log_call_arg
-        assert "CIVITAI_API_TOKEN" in log_call_arg
-        assert "https://httpbin.org/status/403" in log_call_arg
+        with patch('urllib.request.urlopen') as mock_urlopen:
+            with patch('time.sleep') as mock_sleep:
+                from urllib.error import HTTPError
+                mock_urlopen.side_effect = HTTPError("https://httpbin.org/status/403", 429, "Too Many Requests", {}, None)
+                
+                with pytest.raises(RuntimeError, match="Failed to download"):
+                    fetcher.fetch([dyn_model])
+                
+                # Check that logger.warning was called for the 403
+                warning_calls = [call[0][0] for call in mock_logger.warning.call_args_list]
+                assert any("[HTTP 403 Forbidden]" in warning for warning in warning_calls)
+                assert any("HF_TOKEN" in warning for warning in warning_calls)
+                assert any("CIVITAI_API_TOKEN" in warning for warning in warning_calls)
+                assert any("https://httpbin.org/status/403" in warning for warning in warning_calls)
+                
+                # Check that it tried to add the URI twice (because it retries 403 once before fallback)
+                assert mock_api_instance.add_uris.call_count == 2
+
+
+@pytest.mark.skipif(
+    not __import__("os").environ.get("CIVITAI_API_TOKEN"),
+    reason="CIVITAI_API_TOKEN environment variable is not set"
+)
+def test_real_download_civitai_lora(tmp_path):
+    """Real integration test to download a LoRA from Civitai using a URN."""
+    import os
+    from pathlib import Path
+    from ai_pipeline_toolbox.core.helpers import resolve_air_urn
+    
+    urn = "urn:air:flux1:lora:civitai:1075723@1207606"
+    download_url = resolve_air_urn(urn)
+    
+    civitai_token = os.environ.get("CIVITAI_API_TOKEN")
+    fetcher = ModelFetcher(
+        cache_dir=str(tmp_path / "models"),
+        civitai_token=civitai_token
+    )
+    
+    model = DynamicModel(
+        url=download_url,
+        provider="civitai",
+        category="Lora",
+        filename="watercolor_real_test.safetensors"
+    )
+    
+    res = fetcher.fetch([model])
+    local_path = Path(res[model])
+    
+    assert local_path.exists()
+    assert local_path.stat().st_size > 0
+
 
 
 
