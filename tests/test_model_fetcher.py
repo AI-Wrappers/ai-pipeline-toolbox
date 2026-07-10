@@ -17,7 +17,10 @@ def mock_aria2():
 @pytest.fixture
 def fetcher(tmp_path, mock_aria2):
     """Create ModelFetcher with mocked aria2p."""
-    return ModelFetcher(cache_dir=str(tmp_path / "models"), hf_token='mock_hf', civitai_token='mock_civitai')
+    return ModelFetcher(
+        cache_dir=str(tmp_path / "models"),
+        tokens_for_provider={"huggingface": "mock_hf", "civitai": "mock_civitai"}
+    )
 
 def test_fetcher_enum_models(fetcher, mock_aria2):
     """Test fetching from Enum models with specific providers."""
@@ -45,12 +48,35 @@ def test_fetcher_dynamic_model(fetcher, mock_aria2):
     mock_api_instance.add_uris.return_value = mock_dl
     mock_api_instance.get_downloads.return_value = [mock_dl]
     
-    dyn_model = DynamicModel(url="https://civitai.com/api/download/models/12345", provider="civitai", category="Dynamic")
+    dyn_model = DynamicModel(url="https://huggingface.co/comfyanonymous/flux_text_encoders/resolve/main/clip_l.safetensors", provider="huggingface", category="Dynamic")
     fetcher.fetch([dyn_model])
         
     mock_api_instance.add_uris.assert_called_once()
     calls = mock_api_instance.add_uris.call_args_list
-    assert any("Authorization: Bearer mock_civitai" in kwargs['options'].get('header', []) for args, kwargs in calls)
+    assert any("Authorization: Bearer mock_hf" in kwargs['options'].get('header', []) for args, kwargs in calls)
+
+def test_fetcher_civitai_immediate_fallback(fetcher, mock_aria2):
+    """Test that Civitai models are immediately downloaded using Python fallback."""
+    dyn_model = DynamicModel(
+        url="https://civitai.com/api/download/models/12345",
+        provider="civitai",
+        category="Dynamic",
+        filename="civitai_model.safetensors"
+    )
+    with patch.object(fetcher, '_python_fallback_download') as mock_fallback:
+        res = fetcher.fetch([dyn_model])
+        
+        mock_fallback.assert_called_once_with(
+            fetcher.cache_dir / "Dynamic" / "civitai_model.safetensors",
+            "civitai",
+            "https://civitai.com/api/download/models/12345"
+        )
+        
+        assert dyn_model in res
+        assert res[dyn_model] == str(fetcher.cache_dir / "Dynamic" / "civitai_model.safetensors")
+        
+        mock_api_instance = mock_aria2.return_value
+        mock_api_instance.add_uris.assert_not_called()
 
 def test_fetcher_deduplicates_duplicate_models(fetcher, mock_aria2):
     """Test that duplicate models resolving to the same local path are only downloaded once."""
@@ -62,8 +88,8 @@ def test_fetcher_deduplicates_duplicate_models(fetcher, mock_aria2):
     mock_api_instance.get_downloads.return_value = [mock_dl]
     
     # Two unequal DynamicModels (different URLs) that resolve to the same filename and category
-    dyn_model1 = DynamicModel(url="https://civitai.com/api/download/models/797871", provider="civitai", category="Dynamic", filename="watercolor.safetensors")
-    dyn_model2 = DynamicModel(url="https://civitai.com/api/download/models/797871?another_param=1", provider="civitai", category="Dynamic", filename="watercolor.safetensors")
+    dyn_model1 = DynamicModel(url="https://huggingface.co/models/watercolor.safetensors", provider="huggingface", category="Dynamic", filename="watercolor.safetensors")
+    dyn_model2 = DynamicModel(url="https://huggingface.co/models/watercolor.safetensors?another_param=1", provider="huggingface", category="Dynamic", filename="watercolor.safetensors")
     
     res = fetcher.fetch([dyn_model1, dyn_model2])
     
@@ -128,7 +154,7 @@ def test_real_download_civitai_lora(tmp_path):
     civitai_token = os.environ.get("CIVITAI_API_TOKEN")
     fetcher = ModelFetcher(
         cache_dir=str(tmp_path / "models"),
-        civitai_token=civitai_token
+        tokens_for_provider={"civitai": civitai_token}
     )
     
     model = DynamicModel(

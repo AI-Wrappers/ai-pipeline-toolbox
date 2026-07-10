@@ -25,8 +25,6 @@ class ModelFetcher(BaseFetcher):
         self,
         cache_dir: str = "./models_cache",
         start_port: int = 6800,
-        hf_token: Optional[str] = None,
-        civitai_token: Optional[str] = None,
         max_concurrent_downloads: int = 3,
         max_connections_for_provider: Optional[Dict[str, int]] = None,
         tokens_for_provider: Optional[Dict[str, str]] = None,
@@ -35,16 +33,11 @@ class ModelFetcher(BaseFetcher):
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         self.port = start_port
 
-        self.tokens_for_provider = {
-            Provider.HUGGINGFACE: hf_token or os.environ.get("HF_TOKEN"),
-            Provider.CIVITAI: civitai_token or os.environ.get("CIVITAI_API_TOKEN"),
-        }
+        self.tokens_for_provider = {}
         if tokens_for_provider:
-            self.tokens_for_provider.update(tokens_for_provider)
-
-        # For backward compatibility
-        self.hf_token = self.tokens_for_provider.get(Provider.HUGGINGFACE)
-        self.civitai_token = self.tokens_for_provider.get(Provider.CIVITAI)
+            for k, v in tokens_for_provider.items():
+                key_str = k.value if isinstance(k, Enum) else str(k)
+                self.tokens_for_provider[key_str] = v
 
         self.max_concurrent_downloads = max_concurrent_downloads
 
@@ -382,8 +375,10 @@ class ModelFetcher(BaseFetcher):
                     task["status"] = "fallback"
                     task["allocated_connections"] = 1
 
-                    hf_status = "set" if self.hf_token else "not set"
-                    civitai_status = "set" if self.civitai_token else "not set"
+                    hf_token_val = self.tokens_for_provider.get(Provider.HUGGINGFACE) or self.tokens_for_provider.get("huggingface")
+                    civitai_token_val = self.tokens_for_provider.get(Provider.CIVITAI) or self.tokens_for_provider.get("civitai")
+                    hf_status = "set" if hf_token_val else "not set"
+                    civitai_status = "set" if civitai_token_val else "not set"
                     logger.warning(
                         f"\n[HTTP 403 Forbidden] Download failed via aria2c twice for {local_path}!\n"
                         f"Target URL: {task['download_url']}\n"
@@ -440,6 +435,27 @@ class ModelFetcher(BaseFetcher):
             fallback_futures = {}  # future -> local_path
 
             while any(task["status"] in ("pending", "downloading", "fallback") for task in tasks.values()):
+                # Submit Civitai tasks to fallback download immediately (respecting max_concurrent_downloads)
+                active_tasks_count = sum(1 for t in tasks.values() if t["status"] in ("downloading", "fallback"))
+                for local_path, task in tasks.items():
+                    if task["status"] == "pending" and task["provider"] in ("civitai", Provider.CIVITAI):
+                        if active_tasks_count >= self.max_concurrent_downloads:
+                            break
+                        task["status"] = "fallback"
+                        task["allocated_connections"] = 1
+                        logger.info(
+                            f"Civitai provider detected. Downloading {task['filename']} "
+                            f"immediately using Python fallback instead of aria2c."
+                        )
+                        future = executor.submit(
+                            self._python_fallback_download,
+                            local_path,
+                            task["provider"],
+                            task["download_url"]
+                        )
+                        fallback_futures[future] = local_path
+                        active_tasks_count += 1
+
                 downloads = self.aria2.get_downloads()
                 newly_started_gids = set()
 
